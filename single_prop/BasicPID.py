@@ -1,7 +1,7 @@
 import time
 
 class BasicPID2:
-    def __init__(self, setpoint, kP=2.0, kI=0.3, kD=0.0):
+    def __init__(self, setpoint, kP=2.0, kI=0.3, kD=0.0, zeros=True):
         self.kP = kP
         self.kI = kI
         self.kD = kD
@@ -9,6 +9,7 @@ class BasicPID2:
         self.prevtm = time.time()
         self.prev_err = 0
         self.e_total = 0
+        self.zeros = zeros
 
     def update(self, current):
         # Calculate the error with respect to the setpoint.
@@ -23,7 +24,7 @@ class BasicPID2:
         # Integral 
         # Calculate for this chunk of time since last
         # using the trapezoidal method
-        if abs(error) < 1:
+        if abs(error) < 0.1 and self.zeros:
             self.e_total = 0
         
         self.e_total += 0.5 * (self.prev_err + error) * (currtm - self.prevtm)
@@ -40,72 +41,37 @@ class BasicPID2:
 
         self.prev_err = error
         self.prevtm = currtm
-        print ("P: {} I: {} D: {}".format(p, i, d))
+        # print ("P: {} I: {} D: {}".format(p, i, d))
         correction = p + i + d
         return correction
 
-class BasicPID:
-    """ Simple PID control.
 
-        This class implements a simplistic PID control algorithm. When first
-        instantiated all the gain variables are set to zero, so calling
-        the method GenOut will just return zero.
-    """
-    def __init__(self):
-        # initialze gains
-        self.Kp = 0
-        self.Kd = 0
-        self.Ki = 0
+class VideoPID(BasicPID2):
+    def update(self, current):
+        # Calculate the error with respect to the setpoint.
+        error = self.setpoint - current
 
-        self.Initialize()
+        # Update current time
+        currtm = time.time()
 
-    def SetKp(self, invar):
-        """ Set proportional gain. """
-        self.Kp = invar
+        # Proportional
+        p = error * self.kP
 
-    def SetKi(self, invar):
-        """ Set integral gain. """
-        self.Ki = invar
+        # Integral 
+        # Calculate for this chunk of time since last
+        # using the trapezoidal method
+        if abs(error) < 0.1 and self.zeros:
+            self.e_total = 0
+        
+        self.e_total += error
+        i = self.e_total * self.kI
+        # Possibly take into account zeroing this if we reach the setpoint.
 
-    def SetKd(self, invar):
-        """ Set derivative gain. """
-        self.Kd = invar
+        # Derivative
+        d = self.kD * (error - self.prev_err)
 
-    def SetPrevErr(self, preverr):
-        """ Set previous error value. """
-        self.prev_err = preverr
-
-    def Initialize(self):
-        # initialize delta t variables
-        self.currtm = time.time()
-        self.prevtm = self.currtm
-
-        self.prev_err = 0
-
-        # term result variables
-        self.Cp = 0
-        self.Ci = 0
-        self.Cd = 0
+        self.prev_err = error
+        correction = p + i + d
+        return correction
 
 
-    def GenOut(self, error):
-        """ Performs a PID computation and returns a control value based on
-            the elapsed time (dt) and the error signal from a summing junction
-            (the error parameter).
-        """
-        self.currtm = time.time()               # get t
-        dt = self.currtm - self.prevtm          # get delta t
-        de = error - self.prev_err              # get delta error
-
-        self.Cp = self.Kp * error               # proportional term
-        self.Ci += error * dt                   # integral term
-
-        self.Cd = 0
-        if dt > 0:                              # no div by zero
-            self.Cd = de/dt                     # derivative term
-
-        self.prevtm = self.currtm               # save t for next pass
-        self.prev_err = error                   # save t-1 error
-
-        # sum the terms and return the result
-        return self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd)
